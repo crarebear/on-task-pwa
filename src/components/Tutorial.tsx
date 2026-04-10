@@ -143,24 +143,27 @@ const Tutorial: React.FC<TutorialProps> = ({ onComplete, setActiveTab }) => {
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%) !important;
-          width: 90%;
-          max-width: 360px;
-          padding: 2.5rem 2rem;
+          width: 95%;
+          max-width: 380px;
+          padding: 2.5rem 1.5rem;
           display: flex;
           flex-direction: column;
-          gap: 1.5rem;
+          gap: 1.25rem;
           text-align: center;
-          box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+          box-shadow: 0 40px 80px rgba(0,0,0,0.3);
+          background: var(--bg-glass) !important;
         }
         .tutorial-box.toast {
           bottom: 100px;
           left: 1rem;
           right: 1rem;
           width: calc(100% - 2rem);
-          padding: 1rem 1.25rem;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+          padding: 0.875rem 1rem;
+          box-shadow: var(--shadow-lg);
           border-left: 4px solid var(--accent);
-          background: rgba(15, 23, 42, 0.95) !important;
+          background: var(--bg-glass) !important;
+          backdrop-filter: blur(24px) saturate(160%);
+          border: 1px solid var(--border-glass);
         }
         .icon-wrap {
           color: var(--accent);
@@ -168,50 +171,52 @@ const Tutorial: React.FC<TutorialProps> = ({ onComplete, setActiveTab }) => {
           padding: 1.25rem;
           border-radius: 20px;
           display: inline-flex;
-          margin-bottom: 1rem;
+          margin-bottom: 0.5rem;
         }
         .modal-top h2 {
-          font-size: 1.75rem;
+          font-size: 1.5rem;
           font-weight: 800;
+          color: var(--text-primary);
         }
         .modal-content {
           color: var(--text-secondary);
           line-height: 1.5;
+          font-size: 0.9375rem;
         }
         .modal-footer {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-top: 0.5rem;
+          margin-top: 1rem;
         }
         .skip-link { font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); opacity: 0.6; }
         .next-btn {
           background: var(--accent);
           color: white;
-          padding: 10px 24px;
+          padding: 12px 28px;
           border-radius: 99px;
           display: flex;
           align-items: center;
           gap: 8px;
           font-weight: 700;
-          box-shadow: 0 8px 16px rgba(99, 102, 241, 0.3);
+          box-shadow: 0 8px 16px rgba(99, 102, 241, 0.2);
         }
         
         .toast-content {
           display: flex;
           align-items: center;
-          gap: 1rem;
+          gap: 0.875rem;
           text-align: left;
         }
         .toast-icon { color: var(--accent); flex-shrink: 0; }
         .toast-text { flex: 1; min-width: 0; }
-        .toast-title { font-weight: 800; font-size: 0.875rem; color: var(--text-primary); margin-bottom: 2px; }
+        .toast-title { font-weight: 800; font-size: 0.8125rem; color: var(--text-primary); margin-bottom: 1px; }
         .toast-text p { font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4; margin: 0; }
         .toast-next {
           background: var(--accent);
           color: white;
-          width: 36px;
-          height: 36px;
+          width: 44px;
+          height: 38px;
           border-radius: 12px;
           display: flex;
           align-items: center;

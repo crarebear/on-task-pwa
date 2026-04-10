@@ -104,6 +104,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       snap.forEach(doc => {
         fetchedLogs.push(doc.data() as HourlyLog);
       });
+      // We merge with potential optimistic updates if the listener hasn't caught up
       setLogs(fetchedLogs);
     });
 
@@ -141,12 +142,13 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       timestamp: hourDate.getTime(),
     };
 
+    // Optimistic Update
+    setLogs(prev => [...prev.filter(l => l.id !== id), newLog]);
+
     if (!isMock && user) {
       await setDoc(doc(db, 'logs', user.uid, 'entries', id), newLog);
     } else if (user) {
-       const newLogs = [...logs.filter(l => l.id !== id), newLog];
-       setLogs(newLogs);
-       localStorage.setItem(`logs_${user.uid}`, JSON.stringify(newLogs));
+       localStorage.setItem(`logs_${user.uid}`, JSON.stringify([...logs.filter(l => l.id !== id), newLog]));
     }
   };
 
@@ -160,27 +162,25 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       status: 'ignored'
     };
     
+    // Optimistic Update
+    setLogs(prev => [...prev.filter(l => l.id !== id), skippedLog]);
+
     if (!isMock && user) {
       await setDoc(doc(db, 'logs', user.uid, 'entries', id), skippedLog);
     } else if (user) {
-      // Use functional update to ensure we have the latest state
-      setLogs(prev => {
-        const next = [...prev.filter(l => l.id !== id), skippedLog];
-        localStorage.setItem(`logs_${user.uid}`, JSON.stringify(next));
-        return next;
-      });
+       localStorage.setItem(`logs_${user.uid}`, JSON.stringify([...logs.filter(l => l.id !== id), skippedLog]));
     }
   };
 
   const deleteLog = async (id: string) => {
+    // Optimistic Update
+    setLogs(prev => prev.filter(l => l.id !== id));
+
     if (!isMock && user) {
+      // Physically delete or mark as deleted? Mark as deleted is safer for sync
       await setDoc(doc(db, 'logs', user.uid, 'entries', id), { status: 'deleted' } as any, { merge: true });
     } else if (user) {
-      setLogs(prev => {
-        const next = prev.filter(l => l.id !== id);
-        localStorage.setItem(`logs_${user.uid}`, JSON.stringify(next));
-        return next;
-      });
+      localStorage.setItem(`logs_${user.uid}`, JSON.stringify(logs.filter(l => l.id !== id)));
     }
   };
 
@@ -200,15 +200,16 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     
     const currentHour = now.getHours();
     const startHour = Math.max(schedule.startHour, 5); 
-    const endHour = Math.min(currentHour, schedule.endHour);
+    // We only want finished hours. If it's 10:15 AM, the 10:00 AM hour isn't finished yet.
+    // So h goes from startHour up to currentHour - 1.
+    const endHour = Math.min(currentHour - 1, schedule.endHour);
 
     if (!schedule.activeDays[now.getDay()]) return [];
 
     for (let h = startHour; h <= endHour; h++) {
       const d = new Date(now);
       d.setHours(h, 0, 0, 0);
-      if (d >= now) continue;
-
+      
       const log = logs.find(l => {
         const logDate = new Date(l.timestamp);
         return logDate.getHours() === h && 
@@ -216,7 +217,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
                logDate.getMonth() === now.getMonth();
       });
 
-      // Show in catch-up ONLY if no log exists or it was marked as missed
       const isMissing = !log || log.status === 'missed';
       const isIgnored = log?.status === 'ignored' || log?.status === 'deleted';
 

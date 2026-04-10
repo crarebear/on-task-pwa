@@ -58,14 +58,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
     } catch (err) {
       console.error("Firebase init error:", err);
-      // Fallback or handle nulls
       return { auth: null as any, db: null as any };
     }
   }, []);
 
   useEffect(() => {
     if (isMock) {
-      // Mock user for immediate demo
       setUser({
         uid: 'mock-user-123',
         displayName: 'Demo User',
@@ -78,8 +76,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      setUser(u);
+      
       if (u && u.email) {
-        // Only set loading to false AFTER we check permission
+        // PERMITTED CHECK - Decoupled from core loading to prevent splash hang
+        setLoading(false); // Let the app render while we check permissions
+        
         try {
           const whitelistRef = doc(db, 'whitelist', u.email.toLowerCase());
           const snap = await getDoc(whitelistRef);
@@ -90,9 +92,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       } else {
         setIsPermitted(null);
+        setLoading(false);
       }
-      setUser(u);
-      setLoading(false);
     });
     return () => unsubscribe();
   }, [isMock, auth, db]);
