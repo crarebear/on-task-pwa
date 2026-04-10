@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useFirebase } from './FirebaseContext';
-import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot, collection, query, orderBy, limit } from 'firebase/firestore';
 
 export interface BucketConfig {
   id: string;
@@ -11,9 +11,9 @@ export interface BucketConfig {
 export interface HourlyLog {
   id: string; // ISO string for the hour (e.g., 2026-04-10T09:00:00)
   timestamp: number;
-  buckets: Record<string, number>; // minutes spent in each bucket
+  buckets: Record<string, number>; 
   mood: 'happy' | 'medium' | 'sad';
-  status: 'completed' | 'missed' | 'ignored';
+  status: 'completed' | 'missed' | 'ignored' | 'deleted';
 }
 
 interface AppDataContextType {
@@ -22,13 +22,23 @@ interface AppDataContextType {
   updateBucketName: (id: string, name: string) => void;
   updateGoals: (goals: Record<string, number>) => void;
   addLog: (log: Omit<HourlyLog, 'id' | 'timestamp'>, hourDate: Date) => Promise<void>;
+  skipLog: (hourDate: Date) => Promise<void>;
+  deleteLog: (id: string) => Promise<void>;
   getMissedHours: () => Date[];
+  getIgnoredHours: () => Date[];
+  schedule: {
+    startHour: number;
+    endHour: number;
+    activeDays: boolean[]; 
+  };
+  updateSchedule: (schedule: Partial<AppDataContextType['schedule']>) => void;
   reportConfig: {
     daily: boolean;
     weekly: boolean;
     monthly: boolean;
     trailingX: boolean;
     trailingXDays: number;
+    dialIncrement: 1 | 5;
   };
   updateReportConfig: (config: Partial<AppDataContextType['reportConfig']>) => void;
 }
@@ -45,12 +55,18 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const { user, db, isMock } = useFirebase();
   const [buckets, setBuckets] = useState<BucketConfig[]>(DEFAULT_BUCKETS);
   const [logs, setLogs] = useState<HourlyLog[]>([]);
-  const [reportConfig, setReportConfig] = useState({
+  const [schedule, setSchedule] = useState({
+    startHour: 9,
+    endHour: 22,
+    activeDays: [true, true, true, true, true, true, true]
+  });
+  const [reportConfig, setReportConfig] = useState<AppDataContextType['reportConfig']>({
     daily: true,
     weekly: true,
     monthly: true,
     trailingX: false,
     trailingXDays: 7,
+    dialIncrement: 1,
   });
 
   // Load user settings and logs
@@ -58,31 +74,42 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!user) return;
 
     if (isMock) {
-      // Load from localStorage for mock
       const savedBuckets = localStorage.getItem(`buckets_${user.uid}`);
       const savedLogs = localStorage.getItem(`logs_${user.uid}`);
       const savedReportConfig = localStorage.getItem(`reportConfig_${user.uid}`);
+      const savedSchedule = localStorage.getItem(`schedule_${user.uid}`);
       if (savedBuckets) setBuckets(JSON.parse(savedBuckets));
       if (savedLogs) setLogs(JSON.parse(savedLogs));
       if (savedReportConfig) setReportConfig(JSON.parse(savedReportConfig));
+      if (savedSchedule) setSchedule(JSON.parse(savedSchedule));
       return;
     }
 
-    // Real Firebase listeners
+    // Settings Listener
     const userDocRef = doc(db, 'users', user.uid);
     const unsubUser = onSnapshot(userDocRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
         if (data.buckets) setBuckets(data.buckets);
+        if (data.schedule) setSchedule(data.schedule);
+        if (data.reportConfig) setReportConfig(data.reportConfig);
       }
     });
 
-    // We'd typically use a collection for logs, but for simplicity we can store in a sub-collection
-    // For this demo, let's just listen to recent logs
-    // (In reality, you'd want a more complex query)
+    // Logs Listener - RECENT ONLY for performance
+    const logsColRef = collection(db, 'logs', user.uid, 'entries');
+    const logsQuery = query(logsColRef, orderBy('timestamp', 'desc'), limit(200));
+    const unsubLogs = onSnapshot(logsQuery, (snap) => {
+      const fetchedLogs: HourlyLog[] = [];
+      snap.forEach(doc => {
+        fetchedLogs.push(doc.data() as HourlyLog);
+      });
+      setLogs(fetchedLogs);
+    });
 
     return () => {
       unsubUser();
+      unsubLogs();
     };
   }, [user, db, isMock]);
 
@@ -114,14 +141,56 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       timestamp: hourDate.getTime(),
     };
 
-    const newLogs = [...logs.filter(l => l.id !== id), newLog];
-    setLogs(newLogs);
-
     if (!isMock && user) {
-      // Store in firestore: logs/{uid}/entries/{id}
-      // Implementation omitted for brevity but follows the pattern
+      await setDoc(doc(db, 'logs', user.uid, 'entries', id), newLog);
     } else if (user) {
-      localStorage.setItem(`logs_${user.uid}`, JSON.stringify(newLogs));
+       const newLogs = [...logs.filter(l => l.id !== id), newLog];
+       setLogs(newLogs);
+       localStorage.setItem(`logs_${user.uid}`, JSON.stringify(newLogs));
+    }
+  };
+
+  const skipLog = async (hourDate: Date) => {
+    const id = hourDate.toISOString();
+    const skippedLog: HourlyLog = {
+      id,
+      timestamp: hourDate.getTime(),
+      buckets: {},
+      mood: 'medium',
+      status: 'ignored'
+    };
+    
+    if (!isMock && user) {
+      await setDoc(doc(db, 'logs', user.uid, 'entries', id), skippedLog);
+    } else if (user) {
+      // Use functional update to ensure we have the latest state
+      setLogs(prev => {
+        const next = [...prev.filter(l => l.id !== id), skippedLog];
+        localStorage.setItem(`logs_${user.uid}`, JSON.stringify(next));
+        return next;
+      });
+    }
+  };
+
+  const deleteLog = async (id: string) => {
+    if (!isMock && user) {
+      await setDoc(doc(db, 'logs', user.uid, 'entries', id), { status: 'deleted' } as any, { merge: true });
+    } else if (user) {
+      setLogs(prev => {
+        const next = prev.filter(l => l.id !== id);
+        localStorage.setItem(`logs_${user.uid}`, JSON.stringify(next));
+        return next;
+      });
+    }
+  };
+
+  const updateSchedule = async (newSchedule: Partial<AppDataContextType['schedule']>) => {
+    const updated = { ...schedule, ...newSchedule };
+    setSchedule(updated);
+    if (!isMock && user) {
+      await setDoc(doc(db, 'users', user.uid), { schedule: updated }, { merge: true });
+    } else if (user) {
+      localStorage.setItem(`schedule_${user.uid}`, JSON.stringify(updated));
     }
   };
 
@@ -129,26 +198,39 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const now = new Date();
     const missed: Date[] = [];
     
-    // Check hours from 9 AM to current hour (up to 11 PM)
     const currentHour = now.getHours();
-    const startHour = 9;
-    const endHour = Math.min(currentHour, 23);
+    const startHour = Math.max(schedule.startHour, 5); 
+    const endHour = Math.min(currentHour, schedule.endHour);
+
+    if (!schedule.activeDays[now.getDay()]) return [];
 
     for (let h = startHour; h <= endHour; h++) {
       const d = new Date(now);
       d.setHours(h, 0, 0, 0);
-      
-      const logExists = logs.some(l => {
+      if (d >= now) continue;
+
+      const log = logs.find(l => {
         const logDate = new Date(l.timestamp);
-        return logDate.getHours() === h && logDate.getDate() === now.getDate();
+        return logDate.getHours() === h && 
+               logDate.getDate() === now.getDate() &&
+               logDate.getMonth() === now.getMonth();
       });
 
-      // Special case: if we are in the hour (e.g. 9:05 AM), 
-      // we are tracking the 8-9 period, which is "Hour 9" notification.
-      // So if it's 9:05, we check if Log for 9:00 was filled.
-      if (!logExists) missed.push(d);
+      // Show in catch-up ONLY if no log exists or it was marked as missed
+      const isMissing = !log || log.status === 'missed';
+      const isIgnored = log?.status === 'ignored' || log?.status === 'deleted';
+
+      if (isMissing && !isIgnored) missed.push(d);
     }
     return missed;
+  }, [logs, schedule]);
+
+  const getIgnoredHours = useCallback(() => {
+    const now = new Date();
+    return logs
+      .filter(l => l.status === 'ignored' && new Date(l.timestamp).getDate() === now.getDate())
+      .map(l => new Date(l.timestamp))
+      .sort((a, b) => b.getTime() - a.getTime());
   }, [logs]);
 
   const updateReportConfig = async (config: Partial<AppDataContextType['reportConfig']>) => {
@@ -168,9 +250,14 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       updateBucketName, 
       updateGoals, 
       addLog, 
+      skipLog,
+      deleteLog,
       getMissedHours, 
+      getIgnoredHours,
       reportConfig, 
-      updateReportConfig 
+      updateReportConfig,
+      schedule,
+      updateSchedule
     }}>
       {children}
     </AppDataContext.Provider>

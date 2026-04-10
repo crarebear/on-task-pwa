@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, type User } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
 
 // Dummy config for demo purposes
 const dummyFirebaseConfig = {
@@ -17,6 +17,7 @@ interface FirebaseContextType {
   user: User | null;
   loading: boolean;
   isMock: boolean;
+  isPermitted: boolean | null; // null while checking
   login: () => Promise<void>;
   logout: () => Promise<void>;
   db: any; // Firestore instance
@@ -27,6 +28,7 @@ const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPermitted, setIsPermitted] = useState<boolean | null>(null);
   const [isMock] = useState(() => 
     !import.meta.env.VITE_FIREBASE_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY === "mock-api-key"
   );
@@ -70,16 +72,30 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         email: 'demo@ontask.app',
         photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
       } as any);
+      setIsPermitted(true);
       setLoading(false);
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      if (u && u.email) {
+        // Only set loading to false AFTER we check permission
+        try {
+          const whitelistRef = doc(db, 'whitelist', u.email.toLowerCase());
+          const snap = await getDoc(whitelistRef);
+          setIsPermitted(snap.exists());
+        } catch (err) {
+          console.error("Whitelist check error:", err);
+          setIsPermitted(false);
+        }
+      } else {
+        setIsPermitted(null);
+      }
       setUser(u);
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [isMock, auth]);
+  }, [isMock, auth, db]);
 
   const login = async () => {
     if (isMock) {
@@ -99,7 +115,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   return (
-    <FirebaseContext.Provider value={{ user, loading, isMock, login, logout, db }}>
+    <FirebaseContext.Provider value={{ user, loading, isMock, isPermitted, login, logout, db }}>
       {children}
     </FirebaseContext.Provider>
   );

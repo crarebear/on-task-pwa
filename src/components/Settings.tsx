@@ -2,14 +2,26 @@ import React from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { useTheme } from '../context/ThemeContext';
 import { useFirebase } from '../context/FirebaseContext';
-import { Moon, Sun, LogOut, Bell } from 'lucide-react';
+import { Moon, Sun, LogOut, Bell, ClipboardList, ChevronRight } from 'lucide-react';
 import { sendLocalNotification } from '../utils/notifications';
 
 
 const Settings: React.FC = () => {
-  const { buckets, updateBucketName, updateGoals, reportConfig, updateReportConfig } = useAppData();
   const { theme, toggleTheme } = useTheme();
   const { user, logout, isMock } = useFirebase();
+  const { 
+    buckets, 
+    updateBucketName, 
+    updateGoals, 
+    reportConfig, 
+    updateReportConfig,
+    schedule,
+    updateSchedule,
+    getIgnoredHours,
+    deleteLog
+  } = useAppData();
+
+  const daysLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   return (
     <div className="settings-page">
@@ -58,6 +70,75 @@ const Settings: React.FC = () => {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3>App Schedule</h3>
+        <div className="glass-card schedule-card">
+          <div className="schedule-row">
+            <label>Start Hour</label>
+            <select 
+              value={schedule.startHour}
+              onChange={(e) => updateSchedule({ startHour: parseInt(e.target.value) })}
+            >
+              {Array.from({ length: 24 }, (_, i) => (
+                <option key={i} value={i}>{i === 0 ? '12 AM' : i <= 12 ? `${i} AM` : `${i-12} PM`}</option>
+              ))}
+            </select>
+          </div>
+          <div className="schedule-row">
+            <label>End Hour</label>
+            <select 
+              value={schedule.endHour}
+              onChange={(e) => updateSchedule({ endHour: parseInt(e.target.value) })}
+            >
+              {Array.from({ length: 24 }, (_, i) => (
+                <option key={i} value={i}>{i === 0 ? '12 AM' : i <= 12 ? `${i} AM` : `${i-12} PM`}</option>
+              ))}
+            </select>
+          </div>
+          <div className="days-row">
+            <label>Active Days</label>
+            <div className="days-selector">
+              {daysLabels.map((label, i) => (
+                <button
+                  key={i}
+                  className={`day-btn ${schedule.activeDays[i] ? 'active' : ''}`}
+                  onClick={() => {
+                    const newDays = [...schedule.activeDays];
+                    newDays[i] = !newDays[i];
+                    updateSchedule({ activeDays: newDays });
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3>App Settings</h3>
+        <div className="glass-card settings-card">
+          <div className="settings-row">
+            <span>Dial Increment</span>
+            <div className="btn-group">
+              <button 
+                className={`group-btn ${reportConfig.dialIncrement === 1 ? 'active' : ''}`}
+                onClick={() => updateReportConfig({ dialIncrement: 1 })}
+              >
+                1m
+              </button>
+              <button 
+                className={`group-btn ${reportConfig.dialIncrement === 5 ? 'active' : ''}`}
+                onClick={() => updateReportConfig({ dialIncrement: 5 })}
+              >
+                5m
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -121,6 +202,49 @@ const Settings: React.FC = () => {
         </div>
       </section>
 
+      <section className="settings-section">
+        <h3>Manual Log Recovery</h3>
+        <details className="glass-card recovery-details">
+          <summary className="recovery-summary">
+            <span>Recover Missed Hours</span>
+            <ChevronRight className="chevron" size={18} />
+          </summary>
+          <div className="recovery-content">
+            <p className="recovery-desc">Redo an hour you previously skipped or missed today.</p>
+            <div className="recovery-list">
+              {getIgnoredHours().length > 0 ? (
+                getIgnoredHours().map((date) => (
+                  <div key={date.toISOString()} className="recovery-item">
+                    <span>{date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                    <button className="recover-btn" onClick={() => deleteLog(date.toISOString())}>
+                      Recover
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <p className="empty-recovery">No skipped hours to recover.</p>
+              )}
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <section className="settings-section">
+        <h3>Support</h3>
+        <button 
+          className="glass-card theme-btn" 
+          onClick={() => {
+            if (user) {
+              localStorage.removeItem(`tutorial_seen_${user.uid}`);
+              window.location.reload();
+            }
+          }}
+        >
+          <ClipboardList size={20} className="accent-icon" />
+          <span>Restart Onboarding Tour</span>
+        </button>
+      </section>
+
       <style>{`
         .settings-page {
           display: flex;
@@ -141,6 +265,66 @@ const Settings: React.FC = () => {
           gap: 1rem;
           padding: 1rem;
           font-weight: 500;
+          color: var(--text-primary);
+        }
+        .theme-btn span {
+          color: var(--text-primary);
+        }
+        .schedule-card {
+          padding: 1rem;
+          display: flex;
+          flex-direction: column;
+          gap: 1.25rem;
+        }
+        .schedule-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .schedule-row label {
+          font-size: 0.875rem;
+          font-weight: 500;
+        }
+        .schedule-row select {
+          background: var(--bg-primary);
+          color: var(--text-primary);
+          border: 1px solid var(--border-glass);
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 0.875rem;
+        }
+        .days-row {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        .days-row label {
+          font-size: 0.875rem;
+          font-weight: 500;
+        }
+        .days-selector {
+          display: flex;
+          justify-content: space-between;
+          gap: 4px;
+        }
+        .day-btn {
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.75rem;
+          font-weight: 700;
+          background: var(--bg-primary);
+          color: var(--text-secondary);
+          border: 1px solid var(--border-glass);
+          transition: var(--transition);
+        }
+        .day-btn.active {
+          background: var(--accent);
+          color: white;
+          border-color: var(--accent);
         }
         .buckets-edit {
           display: flex;
@@ -284,6 +468,102 @@ const Settings: React.FC = () => {
         .trailing-input span {
           font-size: 0.875rem;
           color: var(--text-secondary);
+        }
+        .settings-card {
+          padding: 1rem;
+        }
+        .settings-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .btn-group {
+          display: flex;
+          background: var(--bg-primary);
+          padding: 4px;
+          border-radius: var(--radius-sm);
+          border: 1px solid var(--border-glass);
+        }
+        .group-btn {
+          padding: 4px 12px;
+          border-radius: 4px;
+          font-size: 0.8125rem;
+          font-weight: 600;
+          color: var(--text-secondary);
+          transition: var(--transition);
+        }
+        .group-btn.active {
+          background: var(--accent);
+          color: white;
+          box-shadow: var(--shadow-sm);
+        }
+
+        .recovery-details {
+          padding: 0;
+          overflow: hidden;
+        }
+        .recovery-summary {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 1.25rem;
+          cursor: pointer;
+          list-style: none;
+          font-weight: 700;
+          font-size: 0.9375rem;
+        }
+        .recovery-summary::-webkit-details-marker {
+          display: none;
+        }
+        .recovery-summary .chevron {
+          transition: transform 0.3s ease;
+          color: var(--text-secondary);
+        }
+        .recovery-details[open] .chevron {
+          transform: rotate(90deg);
+        }
+        .recovery-content {
+          padding: 0 1.25rem 1.25rem;
+          border-top: 1px solid var(--border-glass);
+          padding-top: 1rem;
+        }
+        .recovery-desc {
+          font-size: 0.75rem;
+          color: var(--text-secondary);
+          margin-bottom: 1rem;
+        }
+        .recovery-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        .recovery-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 0.75rem;
+          background: var(--bg-primary);
+          border-radius: var(--radius-sm);
+          border: 1px solid var(--border-glass);
+        }
+        .recovery-item span {
+          font-size: 0.875rem;
+          font-weight: 600;
+        }
+        .recover-btn {
+          padding: 4px 12px;
+          background: var(--accent-soft);
+          color: var(--accent);
+          border-radius: 99px;
+          font-size: 0.75rem;
+          font-weight: 700;
+        }
+        .empty-recovery {
+          font-size: 0.75rem;
+          color: var(--text-secondary);
+          text-align: center;
+          padding: 1rem;
+          font-style: italic;
         }
       `}</style>
     </div>

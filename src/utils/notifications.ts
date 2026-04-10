@@ -16,19 +16,27 @@ export const requestNotificationPermission = async () => {
   return false;
 };
 
-export const sendLocalNotification = (title: string, body: string) => {
+export const sendLocalNotification = async (title: string, body: string) => {
   if (Notification.permission === 'granted') {
-    const notification = new Notification(title, {
-      body,
-      icon: '/logo.png',
-      badge: '/logo.png',
-    });
+    // Try SW notification first (better for PWA)
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (registration) {
+        registration.showNotification(title, {
+          body,
+          icon: '/icons/icon-192x192.png',
+          badge: '/icons/icon-192x192.png',
+          vibrate: [200, 100, 200],
+        } as any);
+        return;
+      }
+    }
 
-    notification.onclick = () => {
-      window.focus();
-      // In a real app, this would route to the log tab
-      notification.close();
-    };
+    // Fallback to basic notification
+    new Notification(title, {
+      body,
+      icon: '/icons/icon-192x192.png',
+    });
   }
 };
 
@@ -38,13 +46,12 @@ export const checkAndNotify = (lastNotifiedHour: number | null) => {
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
 
-  // Between 9am and 10pm (inclusive for the preceding 8am-9am window etc)
-  // Request says "at 9:01am... until 10:01pm"
-  if (currentHour >= 9 && currentHour <= 22 && currentMinute === 1) {
+  // Notification exactly at :00 or :01
+  if (currentMinute === 1) {
     if (lastNotifiedHour !== currentHour) {
       sendLocalNotification(
         "onTask: Time to log!",
-        `How did you spend the last hour (${currentHour - 1}:00- ${currentHour}:00)?`
+        `How did you spend the last hour? Click to check in.`
       );
       return currentHour;
     }

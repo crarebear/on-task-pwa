@@ -1,95 +1,133 @@
-import React, { useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 
 interface CarouselDialProps {
   value: number;
   onChange: (value: number) => void;
   max?: number;
   label?: string;
+  increment?: number;
 }
 
-const CarouselDial: React.FC<CarouselDialProps> = ({ value, onChange, max = 60, label }) => {
+const CarouselDial: React.FC<CarouselDialProps> = ({ value, onChange, max = 60, label, increment = 1 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const ITEM_HEIGHT = 40;
+  const ITEM_HEIGHT = 38; // Compact height
+  const [isScrolling, setIsScrolling] = useState(false);
   
-  const numbers = Array.from({ length: max + 1 }, (_, i) => i);
+  const numbers = useMemo(() => 
+    Array.from({ length: Math.floor(max / increment) + 1 }, (_, i) => i * increment),
+    [max, increment]
+  );
 
   const handleScroll = () => {
     if (!containerRef.current) return;
     const scrollTop = containerRef.current.scrollTop;
     const index = Math.round(scrollTop / ITEM_HEIGHT);
-    const validatedIndex = Math.max(0, Math.min(max, index));
-    if (validatedIndex !== value) {
-      onChange(validatedIndex);
+    const validatedIndex = Math.max(0, Math.min(numbers.length - 1, index));
+    const newValue = numbers[validatedIndex];
+    
+    if (newValue !== value) {
+      onChange(newValue);
     }
   };
 
   useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = value * ITEM_HEIGHT;
-    }
-  }, []); // Only on mount
-
-  // Snap to position after scrolling stops
-  const handleScrollEnd = () => {
     if (!containerRef.current) return;
-    containerRef.current.scrollTo({
-      top: value * ITEM_HEIGHT,
-      behavior: 'smooth'
-    });
-  };
+    const currentIndex = Math.round(containerRef.current.scrollTop / ITEM_HEIGHT);
+    const targetIndex = numbers.indexOf(value);
+    
+    if (targetIndex !== -1 && targetIndex !== currentIndex && !isScrolling) {
+      containerRef.current.scrollTo({
+        top: targetIndex * ITEM_HEIGHT,
+        behavior: 'smooth'
+      });
+    }
+  }, [value, numbers, isScrolling]);
 
   return (
     <div className="dial-container">
       {label && <label className="dial-label">{label}</label>}
-      <div 
-        className="dial-viewport"
-        ref={containerRef}
-        onScroll={handleScroll}
-        onScrollEnd={handleScrollEnd}
-        onMouseUp={handleScrollEnd}
-        onTouchEnd={handleScrollEnd}
-      >
-        <div className="dial-spacer" style={{ height: ITEM_HEIGHT }} />
-        {numbers.map((n) => (
-          <motion.div
-            key={n}
-            className={`dial-item ${value === n ? 'active' : ''}`}
-            style={{ height: ITEM_HEIGHT }}
-            animate={{
-              scale: value === n ? 1.2 : 0.8,
-              opacity: Math.abs(value - n) > 2 ? 0.2 : 0.6,
-            }}
-          >
-            {n}
-          </motion.div>
-        ))}
-        <div className="dial-spacer" style={{ height: ITEM_HEIGHT }} />
-        <div className="dial-indicator" style={{ height: ITEM_HEIGHT, top: ITEM_HEIGHT }} />
+      <div className="dial-outer-wrap">
+        <div className="dial-indicator-stationary" />
+        <div 
+          className="dial-viewport"
+          ref={containerRef}
+          onScroll={handleScroll}
+          onScrollCapture={() => setIsScrolling(true)}
+          onScrollEnd={() => setIsScrolling(false)}
+          onTouchStart={() => setIsScrolling(true)}
+          onTouchEnd={() => setIsScrolling(false)}
+        >
+          <div className="dial-spacer" style={{ height: ITEM_HEIGHT }} />
+          {numbers.map((n) => (
+            <div
+              key={n}
+              className={`dial-item ${value === n ? 'active' : ''}`}
+              style={{ height: ITEM_HEIGHT }}
+              onClick={() => {
+                if (containerRef.current) {
+                  const index = numbers.indexOf(n);
+                  containerRef.current.scrollTo({
+                    top: index * ITEM_HEIGHT,
+                    behavior: 'smooth'
+                  });
+                }
+              }}
+            >
+              {n}
+            </div>
+          ))}
+          <div className="dial-spacer" style={{ height: ITEM_HEIGHT }} />
+        </div>
       </div>
+      
       <style>{`
         .dial-container {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 0.5rem;
+          gap: 0.75rem;
           user-select: none;
         }
         .dial-label {
-          font-size: 0.75rem;
+          font-size: 0.625rem;
           color: var(--text-secondary);
-          font-weight: 500;
+          font-weight: 700;
           text-transform: uppercase;
+          letter-spacing: 0.05em;
+          text-align: center;
+          height: 2.5rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          line-height: 1.2;
+          width: 80px;
+        }
+        .dial-outer-wrap {
+          position: relative;
+          height: ${ITEM_HEIGHT * 3}px;
+          width: 80px;
+        }
+        .dial-indicator-stationary {
+          position: absolute;
+          top: ${ITEM_HEIGHT}px;
+          left: 0;
+          right: 0;
+          height: ${ITEM_HEIGHT}px;
+          background: var(--accent-soft);
+          border: 2px solid var(--accent);
+          border-radius: 12px;
+          pointer-events: none;
+          z-index: 0;
         }
         .dial-viewport {
           position: relative;
-          height: ${ITEM_HEIGHT * 3}px;
+          height: 100%;
+          width: 100%;
           overflow-y: scroll;
           scrollbar-width: none;
           -ms-overflow-style: none;
-          width: 80px;
-          cursor: grab;
           scroll-snap-type: y mandatory;
+          z-index: 1;
         }
         .dial-viewport::-webkit-scrollbar {
           display: none;
@@ -99,22 +137,14 @@ const CarouselDial: React.FC<CarouselDialProps> = ({ value, onChange, max = 60, 
           align-items: center;
           justify-content: center;
           font-size: 1.25rem;
-          font-weight: 600;
+          font-weight: 700;
           scroll-snap-align: center;
-          color: var(--text-primary);
+          color: var(--text-secondary);
+          transition: color 0.2s, transform 0.2s;
         }
         .dial-item.active {
           color: var(--accent);
-        }
-        .dial-indicator {
-          position: absolute;
-          left: 0;
-          right: 0;
-          border-top: 1px solid var(--border-glass);
-          border-bottom: 1px solid var(--border-glass);
-          pointer-events: none;
-          background: var(--accent-soft);
-          border-radius: 4px;
+          font-size: 1.5rem;
         }
         .dial-spacer {
           flex-shrink: 0;

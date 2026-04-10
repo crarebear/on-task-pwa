@@ -1,12 +1,13 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useAppData } from '../context/AppDataContext';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { motion } from 'framer-motion';
-import { Clock, Calendar, ChevronDown, Target } from 'lucide-react';
+import { Clock, Calendar, ChevronDown, Target, BarChart3, PieChart as PieIcon } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const { buckets, logs, reportConfig } = useAppData();
   const [range, setRange] = useState<'daily' | 'weekly' | 'monthly' | 'trailingX'>('daily');
+  const [viewMode, setViewMode] = useState<'distribution' | 'weekday'>('distribution');
 
   // Filter available ranges based on config
   const availableRanges = useMemo(() => {
@@ -73,12 +74,47 @@ const Dashboard: React.FC = () => {
     }));
   }, [buckets, logs, range, reportConfig]);
 
+  // Calculate data by weekday
+  const weekdayData = useMemo(() => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const data = days.map(name => ({
+      name,
+      'on-task': 0,
+      'social': 0,
+      'learning': 0,
+      total: 0
+    }));
+
+    // For weekday view, we use the selected range or all logs
+    const filteredLogs = logs; // You might want to filter this by the current range too
+
+    filteredLogs.forEach(log => {
+      const dayIndex = new Date(log.timestamp).getDay();
+      Object.entries(log.buckets).forEach(([id, mins]) => {
+        if (data[dayIndex][id as keyof typeof data[0]] !== undefined) {
+          (data[dayIndex][id as keyof typeof data[0]] as number) += mins as number;
+        }
+      });
+    });
+
+    // Convert to percentage of time recorded on those days
+    return data.map(d => {
+      const totalRecorded = (d['on-task'] + d['social'] + d['learning']) || 1;
+      return {
+        ...d,
+        'On Task': Math.round((d['on-task'] / totalRecorded) * 100),
+        'Social': Math.round((d['social'] / totalRecorded) * 100),
+        'Learning': Math.round((d['learning'] / totalRecorded) * 100)
+      };
+    });
+  }, [logs]);
+
   const COLORS = rangeData.map(d => d.color);
   const currentRangeLabel = availableRanges.find(r => r.id === range)?.label || 'Report';
 
   return (
     <div className="dashboard">
-      <div className="range-selector-container">
+      <div className="dashboard-controls">
         <div className="glass-card range-card">
           <Calendar size={18} className="accent-icon" />
           <select 
@@ -91,6 +127,23 @@ const Dashboard: React.FC = () => {
             ))}
           </select>
           <ChevronDown size={16} className="chevron" />
+        </div>
+        
+        <div className="glass-card view-mode-card">
+          <button 
+            className={`mode-btn ${viewMode === 'distribution' ? 'active' : ''}`}
+            onClick={() => setViewMode('distribution')}
+            title="Distribution View"
+          >
+            <PieIcon size={18} />
+          </button>
+          <button 
+            className={`mode-btn ${viewMode === 'weekday' ? 'active' : ''}`}
+            onClick={() => setViewMode('weekday')}
+            title="By Day of Week"
+          >
+            <BarChart3 size={18} />
+          </button>
         </div>
       </div>
 
@@ -113,32 +166,63 @@ const Dashboard: React.FC = () => {
       </div>
 
       <motion.div 
+        key={viewMode}
         initial={{ opacity: 0, y: 20 }} 
         animate={{ opacity: 1, y: 0 }} 
-        transition={{ delay: 0.2 }}
         className="glass-card chart-container"
       >
-        <h3>{currentRangeLabel} Distribution</h3>
+        <h3>{viewMode === 'distribution' ? `${currentRangeLabel} Distribution` : 'By Day of Week'}</h3>
         <div className="chart-wrapper">
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={rangeData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={80}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {rangeData.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend verticalAlign="bottom" height={36}/>
-            </PieChart>
-          </ResponsiveContainer>
+          {viewMode === 'distribution' ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie
+                  data={rangeData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {rangeData.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'var(--bg-primary)', 
+                    borderColor: 'var(--border-glass)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)'
+                  }}
+                  itemStyle={{ color: 'var(--text-primary)' }}
+                />
+                <Legend verticalAlign="bottom" height={36}/>
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={weekdayData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-glass)" vertical={false} />
+                <XAxis dataKey="name" stroke="var(--text-secondary)" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="var(--text-secondary)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
+                <Tooltip 
+                  cursor={{ fill: 'var(--accent-soft)', opacity: 0.1 }}
+                  contentStyle={{ 
+                    backgroundColor: 'var(--bg-primary)', 
+                    borderColor: 'var(--border-glass)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+                <Legend verticalAlign="bottom" height={36}/>
+                <Bar dataKey="On Task" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Social" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Learning" fill="#10b981" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </motion.div>
 
@@ -175,15 +259,39 @@ const Dashboard: React.FC = () => {
           gap: 1.5rem;
           padding-bottom: 7rem;
         }
-        .range-selector-container {
+        .dashboard-controls {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 1rem;
           margin-bottom: 0.5rem;
         }
         .range-card {
+          flex: 1;
           display: flex;
           align-items: center;
           gap: 10px;
           padding: 0.75rem 1rem;
           position: relative;
+        }
+        .view-mode-card {
+           display: flex;
+           gap: 4px;
+           padding: 4px;
+        }
+        .mode-btn {
+          width: 36px;
+          height: 36px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 8px;
+          color: var(--text-secondary);
+          transition: var(--transition);
+        }
+        .mode-btn.active {
+          background: var(--accent);
+          color: white;
         }
         .range-select {
           appearance: none;

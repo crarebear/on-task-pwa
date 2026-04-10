@@ -1,0 +1,26 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Whitelist check: Any authenticated user can check if their own email is whitelisted
+    match /whitelist/{email} {
+      allow get: if request.auth != null && request.auth.token.email.lower() == email;
+      allow list: if false; // Prevention of email scraping
+    }
+
+    // User data: Users can only see and edit their own documents
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Logs: Users can only see and edit their own logs
+    match /logs/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      match /hourlyLogs/{logId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+  }
+}

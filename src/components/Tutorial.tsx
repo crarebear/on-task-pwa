@@ -1,32 +1,63 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { ChevronRight, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronRight, ClipboardList, LayoutDashboard, Settings as SettingsIcon, CheckCircle2, Info } from 'lucide-react';
 
 interface TutorialProps {
   onComplete: () => void;
+  setActiveTab: (tab: 'log' | 'dashboard' | 'settings') => void;
 }
 
 const steps = [
   {
-    title: "Welcome to onTask",
-    content: "Each hour (9am-11pm), we'll send a notification to log how you spent your time.",
+    title: "Why onTask?",
+    content: "Accountability is hard. onTask makes it simple by asking for just 10 seconds of honesty every hour.",
+    icon: <CheckCircle2 size={40} />,
+    type: 'MODAL',
+    tab: 'log' as const,
   },
   {
-    title: "The Hourly Log",
-    content: "Use the carousel dials to select minutes for your 3 buckets. Total must not exceed 60 minutes.",
+    title: "The Golden Rule",
+    content: "Every hour must total exactly 60 minutes. Flick the dials to split your time accurately.",
+    icon: <ClipboardList size={40} />,
+    type: 'MODAL',
+    tab: 'log' as const,
   },
   {
-    title: "Track Goals",
-    content: "The Dashboard shows your actual time spend versus the goals you've set.",
+    title: "The Log Queue",
+    content: "Missed a few hours? The 'Log: X of Y' badge at the top keeps track of your pending entries from today.",
+    icon: <Info size={24} />,
+    type: 'TOAST',
+    tab: 'log' as const,
   },
   {
-    title: "Customization",
-    content: "Change bucket names and goals in the Settings tab to fit your routine.",
+    title: "Performance Reports",
+    content: "Swipe to the Report tab to see your 'On-Task' percentage and compare your reality to your goals.",
+    icon: <LayoutDashboard size={24} />,
+    type: 'TOAST',
+    tab: 'dashboard' as const,
+  },
+  {
+    title: "Manual Recovery",
+    content: "Accidentally skipped an hour? You can re-open any of today's skipped hours in the Settings tab.",
+    icon: <SettingsIcon size={24} />,
+    type: 'TOAST',
+    tab: 'settings' as const,
+  },
+  {
+    title: "Stay Notified",
+    content: "We'll send you a subtle tap at the start of each hour to remind you to log. You've got this!",
+    icon: <CheckCircle2 size={24} />,
+    type: 'TOAST',
+    tab: 'settings' as const,
   }
 ];
 
-const Tutorial: React.FC<TutorialProps> = ({ onComplete }) => {
+const Tutorial: React.FC<TutorialProps> = ({ onComplete, setActiveTab }) => {
   const [currentStep, setCurrentStep] = useState(0);
+
+  useEffect(() => {
+    setActiveTab(steps[currentStep].tab);
+  }, [currentStep, setActiveTab]);
 
   const next = () => {
     if (currentStep < steps.length - 1) {
@@ -36,118 +67,163 @@ const Tutorial: React.FC<TutorialProps> = ({ onComplete }) => {
     }
   };
 
-  return (
-    <div className="tutorial-overlay">
-      <motion.div 
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="glass-card tutorial-card"
-      >
-        <button className="close-btn" onClick={onComplete}><X size={20} /></button>
-        
-        <div className="tutorial-content">
-          <motion.h2
-            key={`title-${currentStep}`}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-          >
-            {steps[currentStep].title}
-          </motion.h2>
-          <motion.p
-            key={`content-${currentStep}`}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            {steps[currentStep].content}
-          </motion.p>
-        </div>
+  const current = steps[currentStep];
 
-        <div className="tutorial-footer">
-          <div className="dots">
-            {steps.map((_, i) => (
-              <div key={i} className={`dot ${i === currentStep ? 'active' : ''}`} />
-            ))}
-          </div>
-          <button className="next-btn" onClick={next}>
-            {currentStep === steps.length - 1 ? 'Get Started' : 'Next'}
-            <ChevronRight size={18} />
-          </button>
-        </div>
-      </motion.div>
+  return (
+    <div className="tutorial-wrapper">
+      {current.type === 'MODAL' && (
+        <motion.div 
+          initial={{ opacity: 0 }} 
+          animate={{ opacity: 1 }} 
+          exit={{ opacity: 0 }}
+          className="tutorial-backdrop" 
+          onClick={next}
+        />
+      )}
+
+      <AnimatePresence mode="wait">
+        <motion.div 
+          key={currentStep}
+          initial={current.type === 'MODAL' ? { scale: 0.9, opacity: 0 } : { y: 20, opacity: 0 }}
+          animate={current.type === 'MODAL' ? { scale: 1, opacity: 1 } : { y: 0, opacity: 1 }}
+          exit={current.type === 'MODAL' ? { scale: 0.9, opacity: 0 } : { y: 20, opacity: 0 }}
+          className={`tutorial-box ${current.type.toLowerCase()} glass-card`}
+        >
+          {current.type === 'MODAL' ? (
+            <>
+              <div className="modal-top">
+                <div className="icon-wrap">{current.icon}</div>
+                <h2>{current.title}</h2>
+              </div>
+              <p className="modal-content">{current.content}</p>
+              <div className="modal-footer">
+                <button className="skip-link" onClick={onComplete}>Skip Tour</button>
+                <button className="next-btn" onClick={next}>
+                  {currentStep === steps.length - 1 ? 'Start' : 'Next'}
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="toast-content">
+              <div className="toast-icon">{current.icon}</div>
+              <div className="toast-text">
+                <div className="toast-title">{current.title}</div>
+                <p>{current.content}</p>
+              </div>
+              <button className="toast-next" onClick={next}>
+                {currentStep === steps.length - 1 ? 'Done' : <ChevronRight size={20} />}
+              </button>
+            </div>
+          )}
+        </motion.div>
+      </AnimatePresence>
 
       <style>{`
-        .tutorial-overlay {
+        .tutorial-wrapper {
           position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(2, 6, 23, 0.8);
-          backdrop-filter: blur(8px);
-          z-index: 2000;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 1.5rem;
+          inset: 0;
+          z-index: 20000;
+          pointer-events: none;
         }
-        .tutorial-card {
-          width: 100%;
-          max-width: 400px;
+        .tutorial-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.4);
+          backdrop-filter: blur(8px);
+          pointer-events: auto;
+        }
+        .tutorial-box {
+          pointer-events: auto;
+          position: fixed;
+          max-width: 500px;
+          margin: 0 auto;
+        }
+        .tutorial-box.modal {
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) !important;
+          width: 90%;
+          max-width: 360px;
           padding: 2.5rem 2rem;
-          position: relative;
           display: flex;
           flex-direction: column;
           gap: 1.5rem;
+          text-align: center;
+          box-shadow: 0 40px 80px rgba(0,0,0,0.6);
         }
-        .close-btn {
-          position: absolute;
-          top: 1rem;
+        .tutorial-box.toast {
+          bottom: 100px;
+          left: 1rem;
           right: 1rem;
-          color: var(--text-secondary);
+          width: calc(100% - 2rem);
+          padding: 1rem 1.25rem;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+          border-left: 4px solid var(--accent);
+          background: rgba(15, 23, 42, 0.95) !important;
         }
-        .tutorial-content h2 {
-          font-size: 1.5rem;
-          margin-bottom: 0.75rem;
+        .icon-wrap {
           color: var(--accent);
+          background: var(--accent-soft);
+          padding: 1.25rem;
+          border-radius: 20px;
+          display: inline-flex;
+          margin-bottom: 1rem;
         }
-        .tutorial-content p {
-          color: var(--text-primary);
-          line-height: 1.6;
+        .modal-top h2 {
+          font-size: 1.75rem;
+          font-weight: 800;
         }
-        .tutorial-footer {
+        .modal-content {
+          color: var(--text-secondary);
+          line-height: 1.5;
+        }
+        .modal-footer {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-top: 1rem;
+          margin-top: 0.5rem;
         }
-        .dots {
-          display: flex;
-          gap: 6px;
-        }
-        .dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: var(--text-secondary);
-          opacity: 0.3;
-          transition: var(--transition);
-        }
-        .dot.active {
-          opacity: 1;
-          background: var(--accent);
-          width: 16px;
-          border-radius: 3px;
-        }
+        .skip-link { font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); opacity: 0.6; }
         .next-btn {
           background: var(--accent);
           color: white;
-          padding: 8px 16px;
-          border-radius: var(--radius-md);
+          padding: 10px 24px;
+          border-radius: 99px;
           display: flex;
           align-items: center;
-          gap: 4px;
-          font-weight: 600;
+          gap: 8px;
+          font-weight: 700;
+          box-shadow: 0 8px 16px rgba(99, 102, 241, 0.3);
+        }
+        
+        .toast-content {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          text-align: left;
+        }
+        .toast-icon { color: var(--accent); flex-shrink: 0; }
+        .toast-text { flex: 1; min-width: 0; }
+        .toast-title { font-weight: 800; font-size: 0.875rem; color: var(--text-primary); margin-bottom: 2px; }
+        .toast-text p { font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4; margin: 0; }
+        .toast-next {
+          background: var(--accent);
+          color: white;
+          width: 36px;
+          height: 36px;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          font-size: 0.75rem;
+          font-weight: 800;
+        }
+        @media (max-width: 600px) {
+          .tutorial-box.toast {
+            bottom: 90px;
+          }
         }
       `}</style>
     </div>
