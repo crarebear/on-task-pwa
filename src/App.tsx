@@ -7,6 +7,7 @@ import Settings from './components/Settings';
 import Tutorial from './components/Tutorial';
 import { LayoutDashboard, ClipboardList, Settings as SettingsIcon, LogIn, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { requestNotificationPermission, checkAndNotify } from './utils/notifications';
 
 const App: React.FC = () => {
   const { user, loading, login } = useFirebase();
@@ -15,6 +16,7 @@ const App: React.FC = () => {
   const [missedHours, setMissedHours] = useState<Date[]>([]);
   const [currentMissedIndex, setCurrentMissedIndex] = useState(0);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [, setLastNotifiedHour] = useState<number | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -22,6 +24,15 @@ const App: React.FC = () => {
       
       const hasSeenTutorial = localStorage.getItem(`tutorial_seen_${user.uid}`);
       if (!hasSeenTutorial) setShowTutorial(true);
+
+      // Handle notifications
+      requestNotificationPermission();
+      
+      const interval = setInterval(() => {
+        setLastNotifiedHour(prev => checkAndNotify(prev));
+      }, 30000); // Check every 30s
+      
+      return () => clearInterval(interval);
     }
   }, [user, getMissedHours]);
 

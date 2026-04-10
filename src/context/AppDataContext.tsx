@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useFirebase } from './FirebaseContext';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 
@@ -23,6 +23,14 @@ interface AppDataContextType {
   updateGoals: (goals: Record<string, number>) => void;
   addLog: (log: Omit<HourlyLog, 'id' | 'timestamp'>, hourDate: Date) => Promise<void>;
   getMissedHours: () => Date[];
+  reportConfig: {
+    daily: boolean;
+    weekly: boolean;
+    monthly: boolean;
+    trailingX: boolean;
+    trailingXDays: number;
+  };
+  updateReportConfig: (config: Partial<AppDataContextType['reportConfig']>) => void;
 }
 
 const AppDataContext = createContext<AppDataContextType | undefined>(undefined);
@@ -37,6 +45,13 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const { user, db, isMock } = useFirebase();
   const [buckets, setBuckets] = useState<BucketConfig[]>(DEFAULT_BUCKETS);
   const [logs, setLogs] = useState<HourlyLog[]>([]);
+  const [reportConfig, setReportConfig] = useState({
+    daily: true,
+    weekly: true,
+    monthly: true,
+    trailingX: false,
+    trailingXDays: 7,
+  });
 
   // Load user settings and logs
   useEffect(() => {
@@ -46,8 +61,10 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // Load from localStorage for mock
       const savedBuckets = localStorage.getItem(`buckets_${user.uid}`);
       const savedLogs = localStorage.getItem(`logs_${user.uid}`);
+      const savedReportConfig = localStorage.getItem(`reportConfig_${user.uid}`);
       if (savedBuckets) setBuckets(JSON.parse(savedBuckets));
       if (savedLogs) setLogs(JSON.parse(savedLogs));
+      if (savedReportConfig) setReportConfig(JSON.parse(savedReportConfig));
       return;
     }
 
@@ -108,7 +125,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const getMissedHours = () => {
+  const getMissedHours = useCallback(() => {
     const now = new Date();
     const missed: Date[] = [];
     
@@ -132,10 +149,29 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (!logExists) missed.push(d);
     }
     return missed;
+  }, [logs]);
+
+  const updateReportConfig = async (config: Partial<AppDataContextType['reportConfig']>) => {
+    const newConfig = { ...reportConfig, ...config };
+    setReportConfig(newConfig);
+    if (!isMock && user) {
+      await setDoc(doc(db, 'users', user.uid), { reportConfig: newConfig }, { merge: true });
+    } else if (user) {
+      localStorage.setItem(`reportConfig_${user.uid}`, JSON.stringify(newConfig));
+    }
   };
 
   return (
-    <AppDataContext.Provider value={{ buckets, logs, updateBucketName, updateGoals, addLog, getMissedHours }}>
+    <AppDataContext.Provider value={{ 
+      buckets, 
+      logs, 
+      updateBucketName, 
+      updateGoals, 
+      addLog, 
+      getMissedHours, 
+      reportConfig, 
+      updateReportConfig 
+    }}>
       {children}
     </AppDataContext.Provider>
   );

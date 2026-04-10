@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, query, orderBy, limit } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, type User } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 // Dummy config for demo purposes
 const dummyFirebaseConfig = {
@@ -27,43 +27,39 @@ const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isMock, setIsMock] = useState(true);
+  const [isMock] = useState(() => 
+    !import.meta.env.VITE_FIREBASE_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY === "mock-api-key"
+  );
+  
+  const { auth, db } = React.useMemo(() => {
+    const firebaseConfig = import.meta.env.VITE_FIREBASE_API_KEY 
+      ? {
+          apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+          authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+          projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+          storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+          messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+          appId: import.meta.env.VITE_FIREBASE_APP_ID,
+        }
+      : dummyFirebaseConfig;
 
-  // Attempt to initialize Firebase with real config if provided in env
-  const firebaseConfig = import.meta.env.VITE_FIREBASE_API_KEY 
-    ? {
-        apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-        authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-        projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-        storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-        appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    let app;
+    try {
+      if (!getApps().length) {
+        app = initializeApp(firebaseConfig);
+      } else {
+        app = getApps()[0];
       }
-    : dummyFirebaseConfig;
-
-  let app;
-  let auth: any;
-  let db: any;
-
-  try {
-    if (!getApps().length) {
-      app = initializeApp(firebaseConfig);
-    } else {
-      app = getApps()[0];
+      return { 
+        auth: getAuth(app), 
+        db: getFirestore(app) 
+      };
+    } catch (err) {
+      console.error("Firebase init error:", err);
+      // Fallback or handle nulls
+      return { auth: null as any, db: null as any };
     }
-    auth = getAuth(app);
-    db = getFirestore(app);
-    
-    // If it's the dummy config, we'll stay in "mock" mode for Auth
-    if (firebaseConfig.apiKey === "mock-api-key") {
-      setIsMock(true);
-    } else {
-      setIsMock(false);
-    }
-  } catch (err) {
-    console.error("Firebase init error:", err);
-    setIsMock(true);
-  }
+  }, []);
 
   useEffect(() => {
     if (isMock) {

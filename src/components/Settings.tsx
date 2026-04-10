@@ -2,11 +2,12 @@ import React from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { useTheme } from '../context/ThemeContext';
 import { useFirebase } from '../context/FirebaseContext';
-import { Moon, Sun, LogOut, Settings as SettingsIcon, Save } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Moon, Sun, LogOut, Bell } from 'lucide-react';
+import { sendLocalNotification } from '../utils/notifications';
+
 
 const Settings: React.FC = () => {
-  const { buckets, updateBucketName, updateGoals } = useAppData();
+  const { buckets, updateBucketName, updateGoals, reportConfig, updateReportConfig } = useAppData();
   const { theme, toggleTheme } = useTheme();
   const { user, logout, isMock } = useFirebase();
 
@@ -17,6 +18,17 @@ const Settings: React.FC = () => {
         <button className="glass-card theme-btn" onClick={toggleTheme}>
           {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
           <span>Switch to {theme === 'light' ? 'Dark' : 'Light'} Mode</span>
+        </button>
+      </section>
+
+      <section className="settings-section">
+        <h3>Notifications</h3>
+        <button 
+          className="glass-card theme-btn" 
+          onClick={() => sendLocalNotification("onTask Test", "This is how your hourly reminders will look!")}
+        >
+          <Bell size={20} className="accent-icon" />
+          <span>Test Notification</span>
         </button>
       </section>
 
@@ -46,6 +58,48 @@ const Settings: React.FC = () => {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3>Report Settings</h3>
+        <div className="glass-card report-settings">
+          <div className="report-toggle-group">
+            <Toggle 
+              label="Daily Report" 
+              active={reportConfig.daily} 
+              onToggle={() => updateReportConfig({ daily: !reportConfig.daily })} 
+            />
+            <Toggle 
+              label="Weekly Report" 
+              active={reportConfig.weekly} 
+              onToggle={() => updateReportConfig({ weekly: !reportConfig.weekly })} 
+            />
+            <Toggle 
+              label="Monthly Report" 
+              active={reportConfig.monthly} 
+              onToggle={() => updateReportConfig({ monthly: !reportConfig.monthly })} 
+            />
+            <div className="trailing-x-group">
+              <Toggle 
+                label={`Trailing ${reportConfig.trailingXDays} Days`} 
+                active={reportConfig.trailingX} 
+                onToggle={() => updateReportConfig({ trailingX: !reportConfig.trailingX })} 
+              />
+              {reportConfig.trailingX && (
+                <div className="trailing-input">
+                  <input 
+                    type="number" 
+                    value={reportConfig.trailingXDays} 
+                    onChange={(e) => updateReportConfig({ trailingXDays: parseInt(e.target.value) || 1 })}
+                    min="1"
+                    max="365"
+                  />
+                  <span>days</span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -162,9 +216,87 @@ const Settings: React.FC = () => {
           border-radius: var(--radius-md);
           font-weight: 600;
         }
+        .report-settings {
+          padding: 1rem;
+        }
+        .report-toggle-group {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+        .toggle-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .toggle-label {
+          font-weight: 500;
+          font-size: 0.875rem;
+        }
+        .toggle-switch {
+          width: 44px;
+          height: 24px;
+          background: var(--bg-primary);
+          border-radius: 12px;
+          position: relative;
+          border: 1px solid var(--border-glass);
+          transition: var(--transition);
+        }
+        .toggle-switch.active {
+          background: var(--accent);
+          border-color: var(--accent);
+        }
+        .toggle-knob {
+          width: 20px;
+          height: 20px;
+          background: white;
+          border-radius: 50%;
+          position: absolute;
+          top: 1px;
+          left: 1px;
+          transition: var(--transition);
+        }
+        .toggle-switch.active .toggle-knob {
+          left: 21px;
+        }
+        .trailing-x-group {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+          padding-top: 0.5rem;
+          border-top: 1px solid var(--border-glass);
+        }
+        .trailing-input {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-left: 0.5rem;
+        }
+        .trailing-input input {
+          width: 60px;
+          background: var(--bg-primary);
+          border: 1px solid var(--border-glass);
+          color: var(--text-primary);
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 0.875rem;
+        }
+        .trailing-input span {
+          font-size: 0.875rem;
+          color: var(--text-secondary);
+        }
       `}</style>
     </div>
   );
 };
+
+const Toggle: React.FC<{ label: string; active: boolean; onToggle: () => void }> = ({ label, active, onToggle }) => (
+  <div className="toggle-row">
+    <span className="toggle-label">{label}</span>
+    <button className={`toggle-switch ${active ? 'active' : ''}`} onClick={onToggle}>
+      <div className="toggle-knob" />
+    </button>
+  </div>
+);
 
 export default Settings;
